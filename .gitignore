@@ -1,0 +1,13 @@
+# ===== 공통 =====
+.DS_Store
+*.log
+
+# ===== 백엔드 (Python) =====
+backend/venv/
+backend/.env
+__pycache__/
+*.pyc
+
+# ===== 프론트엔드 (Node) =====
+frontend/node_modules/
+frontend/dist/
