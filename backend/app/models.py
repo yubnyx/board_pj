@@ -36,6 +36,11 @@ class Comment(Base):
     post_id = Column(
         BigInteger, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False
     )
+    # 어느 댓글의 답글인지. NULL이면 일반 댓글, 값이 있으면 그 댓글의 답글(대댓글).
+    # 부모 댓글이 삭제되면 답글도 함께 삭제됩니다.
+    parent_id = Column(
+        BigInteger, ForeignKey("comments.id", ondelete="CASCADE"), nullable=True
+    )
     content = Column(Text, nullable=False)
     author = Column(String(100), nullable=False)
     created_at = Column(DateTime, server_default=func.now())

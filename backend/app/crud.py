@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from . import models, schemas
@@ -23,6 +23,17 @@ def get_posts(
 
 def count_posts(db: Session) -> int:
     return db.query(models.Post).count()
+
+
+def get_posts_count(db: Session, keyword: str | None = None) -> int:
+    """글 총 개수. keyword가 있으면 매칭되는 것만 카운트 (페이지네이션용)."""
+    stmt = select(func.count(models.Post.id))
+    if keyword:
+        stmt = stmt.where(
+            models.Post.title.contains(keyword)
+            | models.Post.content.contains(keyword)
+        )
+    return db.scalar(stmt) or 0
 
 
 def get_post(db: Session, post_id: int) -> models.Post | None:

@@ -16,6 +16,7 @@ import {
   getComments,
   getPost,
   getPosts,
+  searchSemantic,
   updatePost,
 } from "./api.js";
 
@@ -28,34 +29,57 @@ function formatDate(value) {
 // ─────────────────────────────────────────────
 // 글 목록 화면  (주소: / )
 // ─────────────────────────────────────────────
+const TYPE_LABEL = { title: "제목", content: "내용", comment: "댓글" };
+
+const PAGE_SIZE = 10;
+
 function PostList() {
   const navigate = useNavigate();
-  // 주소(?keyword=...)와 검색어를 연동. 주소가 검색 상태의 "정답"이 됩니다.
   const [searchParams, setSearchParams] = useSearchParams();
-  const keyword = searchParams.get("keyword") || "";
 
-  // 입력칸 글자(타이핑 중인 값). 검색 버튼을 눌러야 주소에 반영됩니다.
-  const [text, setText] = useState(keyword);
+  // 주소 파라미터: ?q=... → AI 의미검색,  ?page=N → 일반 목록 페이지
+  const aiQuery = searchParams.get("q") || "";
+  const page = Number(searchParams.get("page") || 1);
+
+  const [text, setText] = useState(aiQuery);
   const [posts, setPosts] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [aiResults, setAiResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // 주소의 keyword가 바뀔 때마다 (검색/뒤로가기/새로고침) 목록을 다시 불러옴
+  // 주소가 바뀔 때마다 (검색/페이지/뒤로가기/새로고침) 데이터 다시 불러옴
   useEffect(() => {
-    setText(keyword); // 입력칸도 주소에 맞춰줌
+    setText(aiQuery);
     setLoading(true);
-    getPosts(keyword)
-      .then(setPosts)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [keyword]);
+    setError(null);
+    if (aiQuery) {
+      searchSemantic(aiQuery)
+        .then(setAiResults)
+        .catch((e) => setError(e.message))
+        .finally(() => setLoading(false));
+    } else {
+      getPosts(page, PAGE_SIZE)
+        .then((res) => {
+          setPosts(res.items);
+          setTotal(res.total);
+        })
+        .catch((e) => setError(e.message))
+        .finally(() => setLoading(false));
+    }
+  }, [aiQuery, page]);
 
   function onSearch(e) {
     e.preventDefault();
     const q = text.trim();
-    // 검색어를 주소에 기록 (비었으면 keyword 제거 → 전체 목록)
-    setSearchParams(q ? { keyword: q } : {});
+    setSearchParams(q ? { q } : {});
   }
+
+  function goToPage(p) {
+    setSearchParams(p === 1 ? {} : { page: String(p) });
+  }
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <div>
@@ -68,21 +92,21 @@ function PostList() {
 
       <form className="search-bar" onSubmit={onSearch}>
         <input
-          placeholder="제목·내용으로 검색"
+          placeholder=" "
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
         <button type="submit">검색</button>
-        {keyword && (
+        {aiQuery && (
           <button type="button" onClick={() => setSearchParams({})}>
             전체보기
           </button>
         )}
       </form>
 
-      {keyword && (
+      {aiQuery && (
         <p className="muted search-info">
-          "{keyword}" 검색 결과 {posts.length}건
+          🤖 "{aiQuery}" 검색 결과 {aiResults.length}건
         </p>
       )}
 
@@ -90,32 +114,96 @@ function PostList() {
         <p className="muted">불러오는 중…</p>
       ) : error ? (
         <p className="error">에러: {error}</p>
-      ) : posts.length === 0 ? (
-        <p className="muted">
-          {keyword ? "검색 결과가 없어요." : "아직 글이 없어요. 첫 글을 써보세요!"}
-        </p>
-      ) : (
-        <table className="list">
-          <thead>
-            <tr>
-              <th className="col-id">번호</th>
-              <th>제목</th>
-              <th className="col-author">작성자</th>
-              <th className="col-date">작성일</th>
-            </tr>
-          </thead>
-          <tbody>
-            {posts.map((p) => (
-              <tr key={p.id} onClick={() => navigate(`/posts/${p.id}`)}>
-                <td className="col-id">{p.id}</td>
-                <td className="title-cell">{p.title}</td>
-                <td className="col-author">{p.author}</td>
-                <td className="col-date">{formatDate(p.created_at)}</td>
-              </tr>
+      ) : aiQuery ? (
+        aiResults.length === 0 ? (
+          <p className="muted">관련 글을 찾을 수 없어요. 다른 단어로 시도해보세요.</p>
+        ) : (
+          <ul className="ai-results">
+            {aiResults.map((r) => (
+              <li
+                key={r.post_id}
+                className="ai-result"
+                onClick={() => navigate(`/posts/${r.post_id}`)}
+              >
+                <div className="ai-result-head">
+                  <span className="ai-title">{r.post_title}</span>
+                  <span className="ai-score">
+                    관련도 {Math.round(r.top_score * 100)}%
+                  </span>
+                </div>
+                <div className="ai-badges">
+                  {r.matched_in.map((t) => (
+                    <span key={t} className={`badge badge-${t}`}>
+                      🏷 {TYPE_LABEL[t]}에서
+                    </span>
+                  ))}
+                </div>
+                {r.snippets.map((s, i) => (
+                  <p key={i} className="ai-snippet">
+                    "{s}"
+                  </p>
+                ))}
+              </li>
             ))}
-          </tbody>
-        </table>
+          </ul>
+        )
+      ) : posts.length === 0 ? (
+        <p className="muted">아직 글이 없어요. 첫 글을 써보세요!</p>
+      ) : (
+        <>
+          <table className="list">
+            <thead>
+              <tr>
+                <th className="col-id">번호</th>
+                <th>제목</th>
+                <th className="col-author">작성자</th>
+                <th className="col-date">작성일</th>
+              </tr>
+            </thead>
+            <tbody>
+              {posts.map((p) => (
+                <tr key={p.id} onClick={() => navigate(`/posts/${p.id}`)}>
+                  <td className="col-id">{p.id}</td>
+                  <td className="title-cell">{p.title}</td>
+                  <td className="col-author">{p.author}</td>
+                  <td className="col-date">{formatDate(p.created_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <Pagination page={page} totalPages={totalPages} onChange={goToPage} />
+        </>
       )}
+    </div>
+  );
+}
+
+// 페이지 번호 버튼들
+function Pagination({ page, totalPages, onChange }) {
+  if (totalPages <= 1) return null;
+  return (
+    <div className="pagination">
+      <button disabled={page === 1} onClick={() => onChange(page - 1)}>
+        이전
+      </button>
+      {[...Array(totalPages)].map((_, i) => {
+        const n = i + 1;
+        return (
+          <button
+            key={n}
+            className={page === n ? "current" : ""}
+            onClick={() => onChange(n)}
+          >
+            {n}
+          </button>
+        );
+      })}
+      <button
+        disabled={page === totalPages}
+        onClick={() => onChange(page + 1)}
+      >
+        다음
+      </button>
     </div>
   );
 }
@@ -181,6 +269,8 @@ function Comments({ postId }) {
   const [comments, setComments] = useState([]);
   const [form, setForm] = useState({ author: "", content: "" });
   const [error, setError] = useState(null);
+  // 지금 어느 댓글에 답글을 다는 중인지 (댓글 id 또는 null)
+  const [replyTo, setReplyTo] = useState(null);
 
   // 댓글 목록을 (다시) 불러오는 함수
   function load() {
@@ -193,20 +283,25 @@ function Comments({ postId }) {
     load();
   }, [postId]);
 
-  async function submit(e) {
+  // 평평한 댓글 목록을 부모/자식으로 분리
+  const roots = comments.filter((c) => c.parent_id == null); // 일반 댓글
+  const repliesOf = (parentId) =>
+    comments.filter((c) => c.parent_id === parentId); // 그 댓글의 답글들
+
+  async function submitComment(e) {
     e.preventDefault();
     setError(null);
     try {
-      await createComment(postId, form);
-      setForm({ author: "", content: "" }); // 입력칸 비우기
-      load(); // 목록 새로고침
+      await createComment(postId, form); // parent_id 없음 → 일반 댓글
+      setForm({ author: "", content: "" });
+      load();
     } catch (err) {
       setError(err.message);
     }
   }
 
   async function remove(id) {
-    if (!window.confirm("이 댓글을 삭제할까요?")) return;
+    if (!window.confirm("삭제할까요? (답글도 함께 삭제됩니다)")) return;
     try {
       await deleteComment(id);
       load();
@@ -220,24 +315,56 @@ function Comments({ postId }) {
       <h2>댓글 {comments.length}</h2>
 
       <ul className="comment-list">
-        {comments.length === 0 && (
-          <li className="muted">첫 댓글을 남겨보세요.</li>
-        )}
-        {comments.map((c) => (
+        {roots.length === 0 && <li className="muted">첫 댓글을 남겨보세요.</li>}
+
+        {roots.map((c) => (
           <li key={c.id} className="comment">
             <div className="comment-head">
               <strong>{c.author}</strong>
               <span className="muted">{formatDate(c.created_at)}</span>
+              <button
+                className="link-action"
+                onClick={() => setReplyTo(replyTo === c.id ? null : c.id)}
+              >
+                답글
+              </button>
               <button className="link-danger" onClick={() => remove(c.id)}>
                 삭제
               </button>
             </div>
             <div className="comment-body">{c.content}</div>
+
+            {/* 답글 목록 (들여쓰기) */}
+            {repliesOf(c.id).map((r) => (
+              <div key={r.id} className="reply">
+                <div className="comment-head">
+                  <span className="reply-arrow">↳</span>
+                  <strong>{r.author}</strong>
+                  <span className="muted">{formatDate(r.created_at)}</span>
+                  <button className="link-danger" onClick={() => remove(r.id)}>
+                    삭제
+                  </button>
+                </div>
+                <div className="comment-body">{r.content}</div>
+              </div>
+            ))}
+
+            {/* 답글 입력칸 (답글 버튼 눌렀을 때만) */}
+            {replyTo === c.id && (
+              <ReplyForm
+                postId={postId}
+                parentId={c.id}
+                onDone={() => {
+                  setReplyTo(null);
+                  load();
+                }}
+              />
+            )}
           </li>
         ))}
       </ul>
 
-      <form className="comment-form" onSubmit={submit}>
+      <form className="comment-form" onSubmit={submitComment}>
         <input
           placeholder="작성자"
           value={form.author}
@@ -258,6 +385,47 @@ function Comments({ postId }) {
         </button>
       </form>
     </section>
+  );
+}
+
+// 답글 입력 폼 (특정 댓글 밑에 뜸)
+function ReplyForm({ postId, parentId, onDone }) {
+  const [form, setForm] = useState({ author: "", content: "" });
+  const [error, setError] = useState(null);
+
+  async function submit(e) {
+    e.preventDefault();
+    setError(null);
+    try {
+      // parent_id를 함께 보냄 → 답글로 저장됨
+      await createComment(postId, { ...form, parent_id: parentId });
+      onDone();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <form className="comment-form reply-form" onSubmit={submit}>
+      <input
+        placeholder="작성자"
+        value={form.author}
+        onChange={(e) => setForm({ ...form, author: e.target.value })}
+        maxLength={100}
+        required
+      />
+      <textarea
+        placeholder="답글을 입력하세요"
+        value={form.content}
+        onChange={(e) => setForm({ ...form, content: e.target.value })}
+        rows={2}
+        required
+      />
+      {error && <p className="error">에러: {error}</p>}
+      <button type="submit" className="primary">
+        답글 등록
+      </button>
+    </form>
   );
 }
 

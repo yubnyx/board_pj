@@ -209,7 +209,7 @@ table.list tbody tr:hover {
   font-size: 14px;
 }
 .link-danger {
-  margin-left: auto;
+  margin-left: auto; /* 오른쪽 끝으로 */
   border: none;
   background: none;
   color: #c33;
@@ -219,6 +219,31 @@ table.list tbody tr:hover {
 .link-danger:hover {
   background: none;
   text-decoration: underline;
+}
+.link-action {
+  margin-left: auto; /* 답글 버튼이 있으면 이게 먼저 오른쪽으로 밀림 */
+  border: none;
+  background: none;
+  color: #2f6fed;
+  font-size: 12px;
+  padding: 2px 4px;
+}
+.link-action:hover {
+  background: none;
+  text-decoration: underline;
+}
+
+/* 답글 (들여쓰기) */
+.reply {
+  margin: 8px 0 0 24px;
+  padding: 8px 0 4px 12px;
+  border-left: 2px solid #eee;
+}
+.reply-arrow {
+  color: #aaa;
+}
+.reply-form {
+  margin: 10px 0 4px 24px;
 }
 
 .comment-form {
@@ -240,4 +265,27 @@ table.list tbody tr:hover {
 }
 .comment-form button {
   align-self: flex-end;
+}
+
+/* 페이지네이션 */
+.pagination {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  margin: 24px 0 8px;
+  flex-wrap: wrap;
+}
+.pagination button {
+  min-width: 36px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.pagination button.current {
+  background: #2f6fed;
+  color: #fff;
+  border-color: #2f6fed;
+  cursor: default;
+}
+.pagination button.current:hover {
+  background: #2f6fed;
 }

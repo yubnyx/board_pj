@@ -19,10 +19,10 @@ async function handle(res) {
   return res.json();
 }
 
-export function getPosts(keyword) {
-  // 검색어가 있으면 ?keyword=... 를 붙여서 요청 (한글 등은 안전하게 인코딩)
-  const query = keyword ? `?keyword=${encodeURIComponent(keyword)}` : "";
-  return fetch(`${BASE}${query}`).then(handle);
+export function getPosts(page = 1, limit = 10) {
+  // 페이지네이션: 응답은 { items, total, skip, limit } 형태
+  const skip = (page - 1) * limit;
+  return fetch(`${BASE}?skip=${skip}&limit=${limit}`).then(handle);
 }
 
 export function getPost(id) {
@@ -64,4 +64,8 @@ export function createComment(postId, comment) {
 
 export function deleteComment(commentId) {
   return fetch(`/api/comments/${commentId}`, { method: "DELETE" }).then(handle);
+}
+
+export function searchSemantic(query){
+  return fetch(`/api/search?q=${encodeURIComponent(query)}`).then(handle);
 }
