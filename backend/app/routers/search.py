@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api", tags=["search"])
 @router.get("/search", response_model=list[schemas.SearchResultItem])
 def vector_search(
     q: str = Query(..., description="검색어"),
-    min_score: float = Query(0.6, ge=0.0, le=1.0, description="이 점수 이상만"),
+    min_score: float = Query(0.55, ge=0.0, le=1.0, description="이 점수 이상만"),
     limit: int = Query(10, ge=1, le=50, description="최대 결과 수"),
 ):
     """의미(벡터) 검색. 글 단위로 묶고 어디서 매칭됐는지 표시."""
